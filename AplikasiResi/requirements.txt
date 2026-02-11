@@ -3,3 +3,4 @@ supabase
 pandas
 pytz
 openpyxl
+streamlit-option-menu
