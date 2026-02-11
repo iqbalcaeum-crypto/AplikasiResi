@@ -15,6 +15,16 @@ try:
 except Exception as e:
     st.error("Gagal menyambungkan ke Database. Cek kembali pengaturan 'Secrets' di Streamlit Cloud.")
     st.stop()
+    # --- DI BAWAH KODE KONEKSI SUPABASE ---
+with st.sidebar:
+    if st.button("🔌 Tes Koneksi Database"):
+        try:
+            # Mencoba menarik satu data saja untuk tes
+            supabase.table("resi_data").select("count", count="exact").limit(1).execute()
+            st.sidebar.success("✅ Koneksi Berhasil!")
+        except Exception as e:
+            st.sidebar.error("❌ Koneksi Gagal!")
+            st.sidebar.code(str(e))
 
 wib = pytz.timezone('Asia/Jakarta')
 st.set_page_config(page_title="Zavascan Pro", layout="wide", page_icon="📦")
@@ -149,3 +159,4 @@ elif selected == "Import Data":
             except: pass
             pbar.progress((i + 1) / len(df_imp))
         st.success(f"Berhasil: {sukses} | Bonus: {skip}")
+
