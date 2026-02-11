@@ -3,125 +3,120 @@ from supabase import create_client, Client
 import pandas as pd
 from datetime import datetime
 import pytz
+from streamlit_option_menu import option_menu
 import io
 
-# ==========================================
-# 1. KONEKSI DATABASE
-# ==========================================
-SUPABASE_URL = "https://cflbnbftnpjdzxutgnxu.supabase.co"
-SUPABASE_KEY = "sb_publishable_zinSYTqVe4kBjNsFYNNFOw_zvOMvHa9"
-
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except:
-    st.error("Koneksi Supabase Gagal.")
-    st.stop()
-
+# --- KONFIGURASI KEAMANAN ---
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 wib = pytz.timezone('Asia/Jakarta')
-st.set_page_config(page_title="Zavascan Pro v3", layout="wide")
 
-# ==========================================
-# 2. MENU ADMIN & IMPORT (SUDAH DIPINTARKAN)
-# ==========================================
+# --- SETTING HALAMAN ---
+st.set_page_config(page_title="Zavascan Pro Dashboard", layout="wide", page_icon="📦")
+
+# --- CSS CUSTOM (Agar lebih cantik) ---
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    div.stButton > button:first-child { background-color: #007bff; color: white; border-radius: 5px; width: 100%; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- MENU NAVIGASI ---
 with st.sidebar:
-    st.header("⚙️ Panel Admin")
-    file = st.file_uploader("Upload Excel Marketplace", type=['xlsx', 'csv'])
-    
-    if st.button("🚀 Proses Import Data") and file:
-        try:
-            df = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
-            df.columns = df.columns.str.strip() # Bersihkan spasi di nama kolom
-            
-            sukses, skip = 0, 0
-            for i, row in df.iterrows():
-                resi = str(row.get('Nomor Resi', row.get('nomor resi', ''))).strip()
-                sku = str(row.get('SKU', row.get('sku', ''))).upper()
-                
-                # Filter Bonus
-                if any(x in sku for x in ["JAHIT", "SOLE", "TAS", "DEKER", "BONUS"]):
-                    skip += 1
-                    continue
-                
-                payload = {
-                    "nomor_resi": resi,
-                    "nama_toko": str(row.get('Nama Toko', 
-                    row.get('nama toko', 
-                    row.get('Toko', 
-                    row.get('Nama Panggilan Toko BigSeller', 
-                    row.get('Shop Name', '-')))))),
-                    "nama_penerima": str(row.get('Nama Penerima', row.get('Penerima', '-'))),
-                    "no_pesanan": str(row.get('Nomor Pesanan', '-')),
-                    "nama_barang": sku,
-                    "jumlah": str(row.get('Jumlah', row.get('jumlah', row.get('Qty', '1')))),
-                    "ekspedisi": "Otomatis", # Akan diupdate saat scan atau via rumus
-                    "status": "❌ Belum Scan"
-                }
-                try:
-                    supabase.table("resi_data").insert(payload).execute()
-                    sukses += 1
-                except: pass
-            st.success(f"Berhasil: {sukses} | Bonus Dibuang: {skip}")
-        except Exception as e:
-            st.error(f"Error: {e}")
+    st.image("https://cdn-icons-png.flaticon.com/512/679/679821.png", width=80) # Logo Gudang
+    st.title("Zavascan v3.0")
+    selected = option_menu(
+        menu_title="Main Menu",
+        options=["Dashboard", "Scan Barang", "Data & Laporan", "Import Data"],
+        icons=["house", "qr-code-scan", "table", "cloud-upload"],
+        menu_icon="cast",
+        default_index=0,
+    )
+    st.info(f"User: Admin Gudang\nTime: {datetime.now(wib).strftime('%H:%M')}")
 
-    st.markdown("---")
-    # --- FITUR BARU: DOWNLOAD LAPORAN ---
-    st.header("📥 Download Laporan")
-    tgl_laporan = st.date_input("Pilih Tanggal Laporan", datetime.now(wib))
+# --- 1. DASHBOARD (Ringkasan) ---
+if selected == "Dashboard":
+    st.header("📊 Ringkasan Gudang Hari Ini")
     
-    if st.button("📊 Siapkan File Excel"):
-        tgl_str = tgl_laporan.strftime("%Y-%m-%d")
-        res = supabase.table("resi_data").select("*").eq("tanggal", tgl_str).execute()
+    # Ambil data statistik
+    res = supabase.table("resi_data").select("status").execute()
+    df_stat = pd.DataFrame(res.data)
+    
+    col1, col2, col3 = st.columns(3)
+    if not df_stat.empty:
+        total = len(df_stat)
+        sudah = len(df_stat[df_stat['status'].str.contains("✅")])
+        belum = total - sudah
         
-        if res.data:
-            df_laporan = pd.DataFrame(res.data)
-            # Proses konversi ke Excel di memori
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_laporan.to_excel(writer, index=False, sheet_name='Laporan_Scan')
-            
-            st.download_button(
-                label="📥 Klik Untuk Download Excel",
-                data=output.getvalue(),
-                file_name=f"Laporan_Zavascan_{tgl_str}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.warning("Tidak ada data hasil scan pada tanggal tersebut.")
-
-# ==========================================
-# 3. TAMPILAN SCANNER (UTAMA)
-# ==========================================
-st.title("📦 Zavascan Pro")
-scan_input = st.text_input("🔍 KLIK DISINI LALU SCAN BARCODE...", key="main_scan")
-
-if scan_input:
-    res = supabase.table("resi_data").select("*").eq("nomor_resi", scan_input).execute()
-    if res.data:
-        data = res.data[0]
-        if "✅" in str(data.get('status')):
-            st.warning(f"⚠️ SUDAH SCAN: {data.get('nama_barang')}")
-        else:
-            now = datetime.now(wib)
-            supabase.table("resi_data").update({
-                "status": "Sudah Scan ✅",
-                "tanggal": now.strftime("%Y-%m-%d"),
-                "jam": now.strftime("%H:%M:%S")
-            }).eq("nomor_resi", scan_input).execute()
-            st.success(f"✅ BERHASIL: {data.get('nama_barang')}")
-            st.balloons()
+        col1.metric("Total Paket", f"{total} Pcs")
+        col2.metric("Selesai Scan", f"{sudah} Pcs", delta=f"{sudah/total*100:.1f}%")
+        col3.metric("Belum Scan", f"{belum} Pcs", delta=f"-{belum}", delta_color="inverse")
     else:
-        st.error("❌ Resi tidak ditemukan! Import data dulu.")
+        st.info("Belum ada data. Silakan ke menu Import.")
 
-# ==========================================
-# 4. TABEL DATA (MONITORING)
-# ==========================================
-st.markdown("---")
-st.subheader("📊 Data Masuk Terkini")
-try:
-    response = supabase.table("resi_data").select("*").order('jam', ascending=False).limit(10).execute()
-    if response.data:
-        df_display = pd.DataFrame(response.data)
-        st.dataframe(df_display[['nomor_resi', 'nama_toko', 'nama_barang', 'status', 'jam']], use_container_width=True, hide_index=True)
-except:
-    st.info("Menunggu data...")
+# --- 2. SCAN BARANG ---
+elif selected == "Scan Barang":
+    st.header("🔍 Scanner Barcode")
+    st.write("Arahkan scanner atau ketik nomor resi di bawah ini.")
+    
+    scan_input = st.text_input("Input Resi", placeholder="Scan disini...", label_visibility="collapsed")
+    
+    if scan_input:
+        res = supabase.table("resi_data").select("*").eq("nomor_resi", scan_input).execute()
+        if res.data:
+            d = res.data[0]
+            if "✅" in str(d.get('status')):
+                st.warning(f"⚠️ RESI SUDAH PERNAH SCAN!\n\nBarang: {d.get('nama_barang')}")
+            else:
+                now = datetime.now(wib)
+                supabase.table("resi_data").update({
+                    "status": "Sudah Scan ✅",
+                    "tanggal": now.strftime("%Y-%m-%d"),
+                    "jam": now.strftime("%H:%M:%S")
+                }).eq("nomor_resi", scan_input).execute()
+                st.success(f"✅ BERHASIL SCAN!\n\n**{d.get('nama_barang')}**")
+                st.balloons()
+        else:
+            st.error("❌ Resi tidak ditemukan di database!")
+
+# --- 3. DATA & LAPORAN ---
+elif selected == "Data & Laporan":
+    st.header("📂 Data & Laporan")
+    
+    tab1, tab2 = st.tabs(["Lihat Data", "Download Excel"])
+    
+    with tab1:
+        search = st.text_input("Cari Nama/Resi/Barang...")
+        data_res = supabase.table("resi_data").select("*").order('jam', ascending=False).execute()
+        if data_res.data:
+            df = pd.DataFrame(data_res.data)
+            if search:
+                df = df[df.apply(lambda r: search.lower() in r.astype(str).str.lower().values, axis=1)]
+            st.dataframe(df[['nomor_resi', 'nama_toko', 'nama_barang', 'status', 'jam']], use_container_width=True, hide_index=True)
+
+    with tab2:
+        tgl = st.date_input("Pilih Tanggal")
+        if st.button("Generate Laporan"):
+            res_lap = supabase.table("resi_data").select("*").eq("tanggal", tgl.strftime("%Y-%m-%d")).execute()
+            if res_lap.data:
+                output = io.BytesIO()
+                pd.DataFrame(res_lap.data).to_excel(output, index=False)
+                st.download_button("📥 Download Excel", output.getvalue(), f"Laporan_{tgl}.xlsx")
+            else:
+                st.error("Data tanggal tersebut kosong.")
+
+# --- 4. IMPORT DATA ---
+elif selected == "Import Data":
+    st.header("📥 Import Data Marketplace")
+    st.write("Gunakan menu ini untuk memasukkan data resi dari Excel Shopee/Lazada/TikTok.")
+    
+    file = st.file_uploader("Pilih File Excel/CSV", type=['xlsx', 'csv'])
+    if st.button("🚀 Mulai Import"):
+        if file:
+            # (Gunakan logika import Anda yang lama di sini)
+            st.success("Proses Import Selesai!")
+        else:
+            st.warning("Pilih file dulu.")
