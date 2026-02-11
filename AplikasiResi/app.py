@@ -8,8 +8,8 @@ import io
 
 # --- 1. KONEKSI KEAMANAN (Membaca dari Secrets) ---
 try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    SUPABASE_URL = st.secrets["https://cflbnbftnpjdzxutgnxu.supabase.co"]
+    SUPABASE_KEY = st.secrets["sb_publishable_zinSYTqVe4kBjNsFYNNFOw_zvOMvHa9"]
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     st.error(f"Gagal memuat Secrets: {e}")
@@ -135,4 +135,5 @@ elif selected == "Import Data":
         except Exception as e:
             st.error("⚠️ PROSES BERHENTI KARENA ERROR:")
             st.code(str(e)) # Ini akan memunculkan pesan error asli dari Supabase
+
             st.warning("Foto pesan di atas dan kirim ke saya agar saya tahu cara memperbaikinya.")
