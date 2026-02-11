@@ -151,7 +151,7 @@ elif selected == "Import Data":
                 
                 payload = {
                     "nomor_resi": resi,
-                    "nama_toko": str(row.get('Nama Toko', row.get('Toko', '-'))),
+                    "nama_toko": str(row.get('Nama Toko', row.get('Nama Panggilan Toko BigSeller', '-'))),
                     "nama_penerima": str(row.get('Nama Penerima', '-')),
                     "nama_barang": sku,
                     "jumlah": str(row.get('Jumlah', row.get('jumlah', '1'))),
