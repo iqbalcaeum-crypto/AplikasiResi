@@ -98,34 +98,7 @@ elif selected == "Scan Barang":
             st.error("❌ Resi tidak ditemukan! Pastikan sudah di-import.")
 
 # ==========================================
-# HALAMAN 3: DATA & LAPORAN
-# ==========================================
-elif selected == "Data & Laporan":
-    st.header("📂 Data Warehouse")
-    tab_data, tab_lap = st.tabs(["Lihat Semua Data", "Download Excel"])
-    
-    with tab_data:
-        cari = st.text_input("Cari Resi/Nama...")
-        res_data = supabase.table("resi_data").select("*").order('jam', ascending=False).execute()
-        if res_data.data:
-            df = pd.DataFrame(res_data.data)
-            if cari:
-                df = df[df.apply(lambda r: cari.lower() in r.astype(str).str.lower().values, axis=1)]
-            st.dataframe(df[['nomor_resi', 'nama_toko', 'nama_barang', 'status', 'jam']], use_container_width=True, hide_index=True)
-
-    with tab_lap:
-        tgl = st.date_input("Pilih Tanggal")
-        if st.button("Siapkan File"):
-            res_lap = supabase.table("resi_data").select("*").eq("tanggal", tgl.strftime("%Y-%m-%d")).execute()
-            if res_lap.data:
-                out = io.BytesIO()
-                pd.DataFrame(res_lap.data).to_excel(out, index=False)
-                st.download_button("📥 Klik Download", out.getvalue(), f"Laporan_{tgl}.xlsx")
-            else:
-                st.error("Tidak ada data pada tanggal tersebut.")
-
-# ==========================================
-# HALAMAN 4: IMPORT DATA (VERSI DETEKTIF)
+# HALAMAN 4: IMPORT DATA (MODE DIAGNOSA TOTAL)
 # ==========================================
 elif selected == "Import Data":
     st.header("📥 Import Marketplace")
@@ -134,48 +107,32 @@ elif selected == "Import Data":
     if st.button("🚀 Proses Import") and file:
         try:
             df_imp = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
-            df_imp.columns = df_imp.columns.str.strip() # Bersihkan spasi di nama kolom
+            df_imp.columns = df_imp.columns.str.strip()
             
-            sukses, skip, gagal = 0, 0, 0
-            error_log = [] # Penampung alasan error
-            bar = st.progress(0)
+            sukses, gagal = 0, 0
+            st.info(f"Mencoba memproses {len(df_imp)} baris data...")
             
             for i, row in df_imp.iterrows():
                 resi = str(row.get('Nomor Resi', row.get('nomor resi', ''))).strip()
-                sku = str(row.get('SKU', row.get('sku', '-'))).upper()
-                
-                # Filter barang bonus
-                if any(x in sku for x in ["JAHIT", "SOLE", "TAS", "DEKER", "BONUS"]):
-                    skip += 1
-                    continue
                 
                 payload = {
                     "nomor_resi": resi,
                     "nama_toko": str(row.get('Nama Toko', row.get('Nama Panggilan Toko BigSeller', '-'))),
-                    "nama_penerima": str(row.get('Nama Penerima', '-')),
-                    "nama_barang": sku,
-                    "jumlah": str(row.get('Jumlah', row.get('jumlah', '1'))),
+                    "nama_barang": str(row.get('SKU', '-')),
+                    "jumlah": str(row.get('Jumlah', '1')),
                     "ekspedisi": deteksi_ekspedisi(resi),
                     "status": "❌ Belum Scan"
                 }
                 
-                try:
-                    supabase.table("resi_data").insert(payload).execute()
-                    sukses += 1
-                except Exception as e:
-                    gagal += 1
-                    # Simpan alasan gagal pertama agar tidak memenuhi layar
-                    if len(error_log) < 1:
-                        error_log.append(str(e))
+                # BAGIAN KRUSIAL: Lihat apa respon Supabase
+                result = supabase.table("resi_data").insert(payload).execute()
                 
-                bar.progress((i + 1) / len(df_imp))
-            
-            st.success(f"✅ Selesai! Berhasil: {sukses} | Bonus: {skip}")
-            
-            if gagal > 0:
-                st.warning(f"⚠️ {gagal} Data Gagal Masuk.")
-                with st.expander("Klik untuk lihat alasan error"):
-                    st.write(error_log[0] if error_log else "Error tidak terdeteksi detailnya.")
-                    
+                # Jika baris ini berhasil dilewati tanpa error, berarti sukses
+                sukses += 1
+                
+            st.success(f"✅ BERHASIL! {sukses} data masuk ke database.")
+
         except Exception as e:
-            st.error(f"Gagal membaca file: {e}")
+            st.error("⚠️ PROSES BERHENTI KARENA ERROR:")
+            st.code(str(e)) # Ini akan memunculkan pesan error asli dari Supabase
+            st.warning("Foto pesan di atas dan kirim ke saya agar saya tahu cara memperbaikinya.")
