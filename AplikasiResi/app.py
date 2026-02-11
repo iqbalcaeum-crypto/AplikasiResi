@@ -137,14 +137,14 @@ elif selected == "Import Data":
             df_imp.columns = df_imp.columns.str.strip() # Bersihkan spasi di nama kolom
             
             sukses, skip, gagal = 0, 0, 0
-            list_error = []
+            error_log = [] # Penampung alasan error
             bar = st.progress(0)
             
             for i, row in df_imp.iterrows():
-                # Ambil data dari excel (pastikan nama kolom di excel sesuai)
                 resi = str(row.get('Nomor Resi', row.get('nomor resi', ''))).strip()
                 sku = str(row.get('SKU', row.get('sku', '-'))).upper()
                 
+                # Filter barang bonus
                 if any(x in sku for x in ["JAHIT", "SOLE", "TAS", "DEKER", "BONUS"]):
                     skip += 1
                     continue
@@ -164,16 +164,18 @@ elif selected == "Import Data":
                     sukses += 1
                 except Exception as e:
                     gagal += 1
-                    # Simpan satu contoh error untuk diberitahukan ke user
-                    if len(list_error) < 1: list_error.append(str(e))
+                    # Simpan alasan gagal pertama agar tidak memenuhi layar
+                    if len(error_log) < 1:
+                        error_log.append(str(e))
                 
                 bar.progress((i + 1) / len(df_imp))
             
             st.success(f"✅ Selesai! Berhasil: {sukses} | Bonus: {skip}")
+            
             if gagal > 0:
-                st.warning(f"⚠️ Ada {gagal} data gagal masuk (mungkin sudah ada/duplikat).")
-                with st.expander("Lihat Detail Error"):
-                    st.write(list_error[0]) # Menampilkan alasan error pertama
+                st.warning(f"⚠️ {gagal} Data Gagal Masuk.")
+                with st.expander("Klik untuk lihat alasan error"):
+                    st.write(error_log[0] if error_log else "Error tidak terdeteksi detailnya.")
                     
         except Exception as e:
-            st.error(f"Gagal membaca file Excel: {e}")
+            st.error(f"Gagal membaca file: {e}")
