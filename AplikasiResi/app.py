@@ -125,7 +125,7 @@ elif selected == "Data & Laporan":
                 st.error("Tidak ada data pada tanggal tersebut.")
 
 # ==========================================
-# HALAMAN 4: IMPORT DATA
+# HALAMAN 4: IMPORT DATA (VERSI DETEKTIF)
 # ==========================================
 elif selected == "Import Data":
     st.header("📥 Import Marketplace")
@@ -134,34 +134,46 @@ elif selected == "Import Data":
     if st.button("🚀 Proses Import") and file:
         try:
             df_imp = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
-            df_imp.columns = df_imp.columns.str.strip()
+            df_imp.columns = df_imp.columns.str.strip() # Bersihkan spasi di nama kolom
             
-            sukses, skip = 0, 0
+            sukses, skip, gagal = 0, 0, 0
+            list_error = []
             bar = st.progress(0)
             
             for i, row in df_imp.iterrows():
+                # Ambil data dari excel (pastikan nama kolom di excel sesuai)
                 resi = str(row.get('Nomor Resi', row.get('nomor resi', ''))).strip()
                 sku = str(row.get('SKU', row.get('sku', '-'))).upper()
                 
-                # Filter Bonus
                 if any(x in sku for x in ["JAHIT", "SOLE", "TAS", "DEKER", "BONUS"]):
                     skip += 1
                     continue
                 
                 payload = {
                     "nomor_resi": resi,
-                    "nama_toko": str(row.get('Nama Toko', row.get('Nama Panggilan Toko BigSeller', '-'))),
+                    "nama_toko": str(row.get('Nama Toko', row.get('Toko', '-'))),
                     "nama_penerima": str(row.get('Nama Penerima', '-')),
                     "nama_barang": sku,
                     "jumlah": str(row.get('Jumlah', row.get('jumlah', '1'))),
                     "ekspedisi": deteksi_ekspedisi(resi),
                     "status": "❌ Belum Scan"
                 }
+                
                 try:
                     supabase.table("resi_data").insert(payload).execute()
                     sukses += 1
-                except: pass
+                except Exception as e:
+                    gagal += 1
+                    # Simpan satu contoh error untuk diberitahukan ke user
+                    if len(list_error) < 1: list_error.append(str(e))
+                
                 bar.progress((i + 1) / len(df_imp))
+            
             st.success(f"✅ Selesai! Berhasil: {sukses} | Bonus: {skip}")
+            if gagal > 0:
+                st.warning(f"⚠️ Ada {gagal} data gagal masuk (mungkin sudah ada/duplikat).")
+                with st.expander("Lihat Detail Error"):
+                    st.write(list_error[0]) # Menampilkan alasan error pertama
+                    
         except Exception as e:
-            st.error(f"Gagal Import: {e}")
+            st.error(f"Gagal membaca file Excel: {e}")
