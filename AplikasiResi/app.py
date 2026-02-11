@@ -127,36 +127,43 @@ elif selected == "Data & Laporan":
 # HALAMAN 4: IMPORT DATA
 # ==========================================
 elif selected == "Import Data":
-    st.header("📥 Import Excel")
-    file = st.file_uploader("Upload File Marketplace", type=['xlsx', 'csv'])
+    st.header("📥 Import Marketplace")
+    file = st.file_uploader("Upload Excel", type=['xlsx', 'csv'])
     
     if st.button("🚀 Proses Import") and file:
-        df_imp = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
-        df_imp.columns = df_imp.columns.str.strip()
-        
-        sukses, skip = 0, 0
-        pbar = st.progress(0)
-        
-        for i, row in df_imp.iterrows():
-            resi = str(row.get('Nomor Resi', row.get('nomor resi', ''))).strip()
-            sku = str(row.get('SKU', row.get('sku', '-'))).upper()
+        try:
+            df_imp = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
+            df_imp.columns = df_imp.columns.str.strip()
             
-            if any(x in sku for x in ["JAHIT", "SOLE", "TAS", "DEKER", "BONUS"]):
-                skip += 1
-                continue
+            sukses, gagal = 0, 0
+            pbar = st.progress(0)
+            
+            for i, row in df_imp.iterrows():
+                resi = str(row.get('Nomor Resi', row.get('nomor resi', ''))).strip()
                 
-            payload = {
-                "nomor_resi": resi,
-                "nama_toko": str(row.get('Nama Toko', row.get('Nama Panggilan Toko BigSeller', '-'))),
-                "nama_barang": sku,
-                "jumlah": str(row.get('Jumlah', row.get('jumlah', '1'))),
-                "ekspedisi": deteksi_ekspedisi(resi),
-                "status": "❌ Belum Scan"
-            }
-            try:
-                supabase.table("resi_data").insert(payload).execute()
-                sukses += 1
-            except: pass
-            pbar.progress((i + 1) / len(df_imp))
-        st.success(f"Berhasil: {sukses} | Bonus: {skip}")
-
+                payload = {
+                    "nomor_resi": resi,
+                    "nama_toko": str(row.get('Nama Toko', '-')),
+                    "nama_barang": str(row.get('SKU', '-')),
+                    "jumlah": str(row.get('Jumlah', '1')),
+                    "ekspedisi": deteksi_ekspedisi(resi),
+                    "status": "❌ Belum Scan"
+                }
+                
+                # Kita tangkap respon dari Supabase
+                try:
+                    supabase.table("resi_data").insert(payload).execute()
+                    sukses += 1
+                except Exception as db_error:
+                    gagal += 1
+                    # Jika gagal, kita tampilkan alasannya sekali saja sebagai contoh
+                    if gagal == 1:
+                        st.error(f"Contoh error dari database: {db_error}")
+                
+                pbar.progress((i + 1) / len(df_imp))
+                
+            st.success(f"✅ Selesai! Berhasil: {sukses} | Gagal: {gagal}")
+            st.info("Jika ada yang gagal, biasanya karena Nomor Resi sudah ada di database (duplikat).")
+            
+        except Exception as e:
+            st.error(f"Gagal membaca file: {e}")
