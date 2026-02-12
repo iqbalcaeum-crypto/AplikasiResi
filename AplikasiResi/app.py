@@ -4,25 +4,35 @@ import pandas as pd
 from datetime import datetime
 import pytz
 from streamlit_option_menu import option_menu
-import io
 
-# --- 1. KONEKSI (DENGAN PEMBERSIH SPASI) ---
-try:
-    # .strip() di bawah ini gunanya menghapus spasi hantu di awal/akhir URL & Key
-    raw_url = st.secrets["SUPABASE_URL"]
-    raw_key = st.secrets["SUPABASE_KEY"]
-    
-    url = raw_url.strip().replace(" ", "")
-    key = raw_key.strip().replace(" ", "")
-    
-    supabase: Client = create_client(url, key)
-except Exception as e:
-    st.error(f"Konfigurasi Secrets bermasalah: {e}")
+# --- 1. DIAGNOSA KONEKSI ---
+st.set_page_config(page_title="Zavascan Pro", layout="wide")
+
+def init_connection():
+    try:
+        url = st.secrets["SUPABASE_URL"].strip().rstrip("/")
+        key = st.secrets["SUPABASE_KEY"].strip()
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"❌ Masalah pada Secrets atau URL: {e}")
+        return None
+
+supabase = init_connection()
+
+if supabase:
+    try:
+        # Tes panggil database ringan
+        supabase.table("resi_data").select("count", count="exact").limit(1).execute()
+        # st.success("✅ Database Terhubung!") # Aktifkan ini hanya untuk tes
+    except Exception as e:
+        st.error(f"❌ Database Supabase sedang OFFLINE atau Paused. Silakan cek dashboard Supabase. Error: {e}")
+        st.stop()
+else:
     st.stop()
 
+# --- 2. MENU & LOGIKA ---
 wib = pytz.timezone('Asia/Jakarta')
 
-# --- 2. MENU ---
 with st.sidebar:
     st.title("📦 ZARS & HYBER")
     selected = option_menu(
@@ -33,27 +43,18 @@ with st.sidebar:
         default_index=0
     )
 
-# --- 3. LOGIKA DATA & LAPORAN (PERBAIKAN ERROR ORDER) ---
-if selected == "Dashboard":
-    st.header("📊 Dashboard")
-    st.write("Selamat datang, Pak Bos!")
-
-elif selected == "Data & Laporan":
+# --- HALAMAN DATA & LAPORAN (FIX SYNTAX) ---
+if selected == "Data & Laporan":
     st.header("📂 Laporan Gudang")
     try:
-        # Gunakan format desc=True untuk versi terbaru
+        # Gunakan desc=True (Format terbaru 2026)
         res = supabase.table("resi_data").select("*").order("jam", desc=True).execute()
         if res.data:
             df = pd.DataFrame(res.data)
             st.dataframe(df, use_container_width=True)
         else:
-            st.info("Belum ada data di database.")
+            st.info("Belum ada data.")
     except Exception as e:
-        st.error(f"Gagal memuat data: {e}")
+        st.error(f"Gagal memuat tabel: {e}")
 
-elif selected == "Import Data":
-    st.header("📥 Import Marketplace")
-    file = st.file_uploader("Upload Excel", type=['xlsx'])
-    if st.button("🚀 Proses") and file:
-        st.info("Sedang memproses... Tunggu sampai selesai.")
-        # ... kode import tetap sama ...
+# Sisa kode (Dashboard, Scan, Import) bisa dilanjutkan di bawah sini...
